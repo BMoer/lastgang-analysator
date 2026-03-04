@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lastgang-Analysator &mdash; Spotpreis-Kostenrechner AT</title>
+    <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+    <script src="spotdata.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+            background: #f5f5f5; color: #1a1a1a; line-height: 1.5;
+        }
+        .container { max-width: 1400px; margin: 0 auto; padding: 0 2rem; }
+        h1 { font-size: 1.8rem; margin-bottom: 0.25rem; }
+        .subtitle { color: #666; margin-bottom: 2rem; font-size: 0.95rem; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 2rem; }
+        .card {
+            background: white; border-radius: 12px; padding: 1.5rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        }
+        .card h2 { font-size: 1rem; margin-bottom: 1rem; color: #333; }
+        .upload-zone {
+            border: 2px dashed #ccc; border-radius: 8px; padding: 1.5rem;
+            text-align: center; cursor: pointer; transition: border-color 0.2s;
+        }
+        .upload-zone:hover, .upload-zone.dragover { border-color: #2563eb; }
+        .upload-zone.loaded { border-color: #16a34a; border-style: solid; background: #f0fdf4; }
+        input[type="file"] { display: none; }
+        .how-to {
+            margin-top: 1rem; font-size: 0.8rem; color: #888; line-height: 1.6;
+        }
+        .how-to strong { color: #555; }
+        .how-to ol { margin: 0.3rem 0 0 1.2rem; }
+        .form-group {
+            margin-bottom: 0.6rem; display: flex; align-items: center; justify-content: space-between;
+        }
+        .form-group label { font-size: 0.9rem; color: #555; }
+        .form-group .input-wrap { display: flex; align-items: center; }
+        .form-group input[type="number"] {
+            width: 90px; padding: 0.4rem 0.5rem; border: 1px solid #ddd;
+            border-radius: 6px; font-size: 0.9rem; text-align: right;
+        }
+        .form-group input[type="number"]:focus { outline: none; border-color: #2563eb; }
+        .unit { font-size: 0.8rem; color: #888; width: 55px; margin-left: 0.4rem; }
+        .divider { border-top: 1px solid #eee; margin: 0.75rem 0; }
+        .total-row { font-weight: 600; }
+        .stats-grid {
+            display: grid; grid-template-columns: repeat(4, 1fr);
+            gap: 1rem; margin-bottom: 2rem;
+        }
+        .stat-card {
+            background: white; border-radius: 12px; padding: 1.25rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08); position: relative;
+        }
+        .stat-card .label {
+            font-size: 0.75rem; color: #888; text-transform: uppercase; letter-spacing: 0.05em;
+            display: flex; align-items: center; gap: 0.35rem;
+        }
+        .stat-card .value { font-size: 1.5rem; font-weight: 700; margin-top: 0.2rem; }
+        .stat-card .detail { font-size: 0.82rem; color: #666; margin-top: 0.15rem; }
+        .stat-card .sub { font-size: 0.8rem; color: #888; margin-top: 0.3rem; border-top: 1px solid #f0f0f0; padding-top: 0.35rem; }
+        .info-icon {
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 15px; height: 15px; border-radius: 50%;
+            background: #e5e7eb; color: #888; font-size: 0.6rem;
+            cursor: help; font-style: normal; flex-shrink: 0;
+        }
+        .info-icon .tip {
+            display: none; position: absolute; top: calc(100% + 6px); left: 0; right: 0;
+            background: #1f2937; color: #f3f4f6; padding: 0.7rem 0.9rem;
+            border-radius: 8px; font-size: 0.8rem; line-height: 1.5;
+            text-transform: none; letter-spacing: normal; font-weight: 400;
+            z-index: 20; box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        .info-icon:hover .tip { display: block; }
+        .chart-wrap {
+            background: white; padding: 1rem 0 0.5rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08); margin-bottom: 2rem;
+        }
+        #chart { width: 100%; height: 550px; }
+        .table-container {
+            background: white; border-radius: 12px; padding: 1.5rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08); overflow-x: auto;
+        }
+        .table-container h2 { font-size: 1rem; margin-bottom: 1rem; color: #333; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+        th, td { padding: 0.55rem 1rem; text-align: right; border-bottom: 1px solid #eee; }
+        th {
+            text-align: right; font-weight: 600; color: #555;
+            font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em;
+        }
+        th:first-child, td:first-child { text-align: left; }
+        tbody tr:last-child td { border-bottom: none; font-weight: 600; background: #f9fafb; }
+        .error {
+            color: #dc2626; padding: 1rem; background: #fef2f2;
+            border-radius: 8px; margin-bottom: 1rem; font-size: 0.9rem;
+        }
+        .hidden { display: none; }
+        .btn {
+            background: #2563eb; color: white; border: none;
+            padding: 0.6rem 1.5rem; border-radius: 8px; font-size: 0.9rem;
+            cursor: pointer; margin-top: 0.75rem; width: 100%;
+        }
+        .btn:hover { background: #1d4ed8; }
+        .btn:disabled { background: #94a3b8; cursor: not-allowed; }
+        .page-pad { padding: 2rem; }
+        @media (max-width: 900px) {
+            .grid { grid-template-columns: 1fr; }
+            .stats-grid { grid-template-columns: 1fr 1fr; }
+            .container, .page-pad { padding: 1rem; }
+        }
+        @media (max-width: 500px) {
+            .stats-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+<div class="page-pad">
+<div class="container">
+    <h1>Lastgang-Analysator</h1>
+    <p class="subtitle">Historischen Lastgang mit EPEX-Day-Ahead-Spotpreisen (AT) abrechnen &mdash; Preisdaten: energy-charts.info (CC BY 4.0)</p>
+
+    <div class="grid">
+        <div class="card">
+            <h2>Lastgang hochladen</h2>
+            <div class="upload-zone" id="uploadZone">
+                <p style="font-size:1.1rem">CSV hier ablegen oder klicken</p>
+                <p style="font-size:0.8rem;color:#999;margin-top:0.5rem">E-Control Viertelstundenwerte (.csv)</p>
+                <input type="file" id="fileInput" accept=".csv">
+            </div>
+            <div id="fileInfo" class="hidden" style="margin-top:0.75rem;font-size:0.85rem;color:#16a34a"></div>
+            <div class="how-to" id="howTo">
+                <strong>So kommst du zu deinen Daten:</strong>
+                <ol>
+                    <li>Im <strong>Smart-Meter-Webportal</strong> deines Netzbetreibers einloggen</li>
+                    <li><em>Verbrauchsdaten</em> oder <em>Datendownload</em> aufrufen</li>
+                    <li>Gew&uuml;nschten Zeitraum w&auml;hlen (z.&thinsp;B. letztes Jahr)</li>
+                    <li>Als Format <strong>&bdquo;E-Control&ldquo;</strong> ausw&auml;hlen und CSV herunterladen</li>
+                </ol>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Aufschl&auml;ge & Abgaben</h2>
+            <div class="form-group">
+                <label>Aufschlag Lieferant</label>
+                <div class="input-wrap">
+                    <input type="number" id="aufschlagLieferant" value="1.5" step="0.1">
+                    <span class="unit">ct/kWh</span>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Netzentgelt</label>
+                <div class="input-wrap">
+                    <input type="number" id="netzentgelt" value="3.5" step="0.1">
+                    <span class="unit">ct/kWh</span>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Steuern & Abgaben</label>
+                <div class="input-wrap">
+                    <input type="number" id="steuernAbgaben" value="2.5" step="0.1">
+                    <span class="unit">ct/kWh</span>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>USt.</label>
+                <div class="input-wrap">
+                    <input type="number" id="ust" value="20" step="1">
+                    <span class="unit">%</span>
+                </div>
+            </div>
+            <div class="divider"></div>
+            <div class="form-group total-row">
+                <label>Fixaufschlag gesamt</label>
+                <div class="input-wrap">
+                    <span id="totalAufschlag">7,50</span>
+                    <span class="unit">ct/kWh</span>
+                </div>
+            </div>
+            <p style="font-size:0.75rem;color:#aaa;margin-top:0.25rem">Richtwerte f&uuml;r AT &mdash; bitte an deinen Tarif anpassen</p>
+            <button class="btn" id="calcBtn" disabled>Berechnen</button>
+        </div>
+    </div>
+
+    <div id="errorMsg" class="hidden error"></div>
+</div>
+</div>
+
+<div id="results" class="hidden">
+    <div class="container" style="padding: 0 2rem;">
+        <div class="stats-grid" id="statsGrid"></div>
+    </div>
+    <div class="chart-wrap">
+        <div id="chart"></div>
+    </div>
+    <div class="container" style="padding: 0 2rem 2rem;">
+        <div class="table-container">
+            <h2>Monatliche Aufschl&uuml;sselung</h2>
+            <table id="monthlyTable"></table>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    // Build price lookup map from embedded SPOT_RAW data
+    const spotPrices = new Map();
+    (function buildPriceMap() {
+        const { ts, p } = SPOT_RAW;
+        for (let i = 0; i < ts.length; i++) {
+            if (p[i] == null) continue;
+            const ctPerKWh = p[i] / 10;
+            const tsMs = ts[i] * 1000;
+            const nextTs = i < ts.length - 1 ? ts[i + 1] : null;
+            const interval = nextTs ? (nextTs - ts[i]) : 900;
+            if (interval >= 3600) {
+                for (let j = 0; j < 4; j++) spotPrices.set(tsMs + j * 900000, ctPerKWh);
+            } else {
+                spotPrices.set(tsMs, ctPerKWh);
+            }
+        }
+    })();
+
+    let consumptionData = null;
+
+    const $ = id => document.getElementById(id);
+    const uploadZone = $('uploadZone');
+    const fileInput = $('fileInput');
+    const fileInfo = $('fileInfo');
+    const howTo = $('howTo');
+    const calcBtn = $('calcBtn');
+    const results = $('results');
+    const errorMsg = $('errorMsg');
+
+    const inputs = {
+        aufschlagLieferant: $('aufschlagLieferant'),
+        netzentgelt: $('netzentgelt'),
+        steuernAbgaben: $('steuernAbgaben'),
+        ust: $('ust'),
+    };
+
+    function val(input) { return parseFloat(input.value) || 0; }
+
+    function updateTotalAufschlag() {
+        const total = val(inputs.aufschlagLieferant) + val(inputs.netzentgelt) + val(inputs.steuernAbgaben);
+        $('totalAufschlag').textContent = total.toFixed(2).replace('.', ',');
+    }
+    Object.values(inputs).forEach(i => i.addEventListener('input', updateTotalAufschlag));
+
+    // --- File Upload ---
+    uploadZone.addEventListener('click', () => fileInput.click());
+    uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('dragover'); });
+    uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('dragover'));
+    uploadZone.addEventListener('drop', e => {
+        e.preventDefault();
+        uploadZone.classList.remove('dragover');
+        if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+    });
+    fileInput.addEventListener('change', () => { if (fileInput.files.length) handleFile(fileInput.files[0]); });
+
+    function handleFile(file) {
+        const reader = new FileReader();
+        reader.onload = e => {
+            try {
+                consumptionData = parseCSV(e.target.result);
+                uploadZone.classList.add('loaded');
+                uploadZone.querySelector('p').textContent = '\u2713 ' + file.name;
+                fileInfo.classList.remove('hidden');
+                howTo.classList.add('hidden');
+                const first = consumptionData[0].ts;
+                const last = consumptionData[consumptionData.length - 1].ts;
+                fileInfo.textContent = consumptionData.length.toLocaleString('de-AT')
+                    + ' Datenpunkte \u00b7 '
+                    + fmtDate(first) + ' bis ' + fmtDate(last);
+                calcBtn.disabled = false;
+                errorMsg.classList.add('hidden');
+            } catch (err) {
+                showError('CSV-Parsing fehlgeschlagen: ' + err.message);
+            }
+        };
+        reader.readAsText(file);
+    }
+
+    function parseCSV(text) {
+        if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+        const lines = text.trim().split('\n');
+        const data = [];
+        for (let i = 1; i < lines.length; i++) {
+            const cols = lines[i].split(';');
+            if (cols.length < 4 || !cols[0] || !cols[3]) continue;
+            const ts = new Date(cols[0].trim());
+            const kWh = parseFloat(cols[3].trim().replace(',', '.'));
+            if (!isNaN(ts.getTime()) && !isNaN(kWh)) data.push({ ts, kWh });
+        }
+        if (!data.length) throw new Error('Keine g\u00fcltigen Datenpunkte gefunden.');
+        return data;
+    }
+
+    function priceKey(date) {
+        const periodStartMs = date.getTime() - 15 * 60000;
+        return periodStartMs - (periodStartMs % 900000);
+    }
+
+    // --- Calculation ---
+    function calculate() {
+        const aufschlag = val(inputs.aufschlagLieferant);
+        const netz = val(inputs.netzentgelt);
+        const steuern = val(inputs.steuernAbgaben);
+        const ustFactor = 1 + val(inputs.ust) / 100;
+
+        let totalkWh = 0, spotCostCt = 0, fullCostCt = 0, matched = 0, unmatched = 0;
+        let spotPriceSum = 0;
+        let globalMinKW = Infinity, globalMaxKW = 0;
+        const monthly = new Map();
+        const ts = [], cKW = [], cSpot = [];
+
+        for (const p of consumptionData) {
+            const pk = priceKey(p.ts);
+            const spot = spotPrices.get(pk);
+            if (spot == null) { unmatched++; continue; }
+
+            matched++;
+            totalkWh += p.kWh;
+            spotPriceSum += spot;
+            const kW = p.kWh * 4;
+            if (kW < globalMinKW) globalMinKW = kW;
+            if (kW > globalMaxKW) globalMaxKW = kW;
+
+            const sc = p.kWh * spot;
+            const fullPrice = (spot + aufschlag + netz + steuern) * ustFactor;
+            const fc = p.kWh * fullPrice;
+
+            spotCostCt += sc;
+            fullCostCt += fc;
+
+            const mk = p.ts.getFullYear() + '-' + String(p.ts.getMonth() + 1).padStart(2, '0');
+            let m = monthly.get(mk);
+            if (!m) { m = { kWh: 0, spotCt: 0, fullCt: 0, spotSum: 0, n: 0, minKW: Infinity, maxKW: 0 }; monthly.set(mk, m); }
+            m.kWh += p.kWh;
+            m.spotCt += sc;
+            m.fullCt += fc;
+            m.spotSum += spot;
+            m.n++;
+            if (kW < m.minKW) m.minKW = kW;
+            if (kW > m.maxKW) m.maxKW = kW;
+
+            ts.push(p.ts);
+            cKW.push(kW);
+            cSpot.push(spot);
+        }
+
+        const avgSpotVolWeighted = totalkWh > 0 ? spotCostCt / totalkWh : 0;
+        const avgSpotTimeWeighted = matched > 0 ? spotPriceSum / matched : 0;
+        const profilkostenPct = avgSpotTimeWeighted > 0
+            ? ((avgSpotVolWeighted / avgSpotTimeWeighted) - 1) * 100 : 0;
+
+        // Grundlast: base load energy share
+        const totalHours = matched * 0.25; // each interval = 15min = 0.25h
+        const baseloadKWh = globalMinKW * totalHours;
+        const baseloadPct = totalkWh > 0 ? (baseloadKWh / totalkWh) * 100 : 0;
+
+        return {
+            totalkWh, spotCostEur: spotCostCt / 100, fullCostEur: fullCostCt / 100,
+            avgSpot: avgSpotVolWeighted,
+            avgSpotTime: avgSpotTimeWeighted,
+            avgFull: totalkWh > 0 ? fullCostCt / totalkWh : 0,
+            profilkostenPct,
+            globalMinKW, globalMaxKW, baseloadPct,
+            matched, unmatched, monthly, ts, cKW, cSpot,
+        };
+    }
+
+    // --- Rendering ---
+    function renderStats(r) {
+        const pfColor = r.profilkostenPct > 0 ? '#dc2626' : '#16a34a';
+        const pfSign = r.profilkostenPct > 0 ? '+' : '';
+        const pfText = r.profilkostenPct > 0
+            ? 'Verbrauch f\u00e4llt tendenziell in teure Stunden \u2014 ung\u00fcnstig f\u00fcr Spottarif'
+            : 'Verbrauch f\u00e4llt tendenziell in g\u00fcnstige Stunden \u2014 gut f\u00fcr Spottarif';
+
+        $('statsGrid').innerHTML = `
+            <div class="stat-card">
+                <div class="label">Gesamtverbrauch
+                    <span class="info-icon">i<span class="tip">Summe aller Viertelstundenwerte im hochgeladenen Zeitraum. Nur Intervalle mit verf\u00fcgbarem Spotpreis werden ber\u00fccksichtigt.</span></span>
+                </div>
+                <div class="value">${fmtNum(r.totalkWh, 0)} kWh</div>
+                <div class="detail">${r.matched.toLocaleString('de-AT')} Intervalle \u00b7 ${fmtNum(r.matched * 0.25 / 24, 0)} Tage</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">Gesamtkosten
+                    <span class="info-icon">i<span class="tip">Spotpreis + alle Aufschl\u00e4ge (Lieferant, Netz, Steuern) inkl. USt., berechnet pro Viertelstunde und aufsummiert.</span></span>
+                </div>
+                <div class="value">${fmtNum(r.fullCostEur, 2)} \u20ac</div>
+                <div class="detail">\u00d8 ${fmtNum(r.avgFull, 2)} ct/kWh inkl. aller Aufschl\u00e4ge</div>
+                <div class="sub">
+                    davon reine Spotkosten: ${fmtNum(r.spotCostEur, 2)} \u20ac
+                    \u00b7 \u00d8 Spotpreis: ${fmtNum(r.avgSpot, 2)} ct/kWh
+                </div>
+            </div>
+            <div class="stat-card" style="border-left: 4px solid ${pfColor}">
+                <div class="label">Profilkostenfaktor
+                    <span class="info-icon">i<span class="tip">Vergleicht den mengengewichteten Durchschnittspreis (was du zahlst) mit dem zeitgewichteten Durchschnitt (was ein flaches Profil zahlen w\u00fcrde). Positiv = ung\u00fcnstig, negativ = g\u00fcnstig f\u00fcr Spottarif.</span></span>
+                </div>
+                <div class="value" style="color:${pfColor}">${pfSign}${fmtNum(r.profilkostenPct, 1)} %</div>
+                <div class="detail">${pfText}</div>
+                <div class="sub">\u00d8 zeitgew.: ${fmtNum(r.avgSpotTime, 2)} \u00b7 mengengew.: ${fmtNum(r.avgSpot, 2)} ct/kWh</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">Grundlast
+                    <span class="info-icon">i<span class="tip">Minimale Leistungsaufnahme \u00fcber den gesamten Zeitraum \u2014 der Verbrauch, der st\u00e4ndig anf\u00e4llt (Standby, K\u00fchlger\u00e4te, etc.). Der Grundlast-Anteil zeigt, wie viel deines Gesamtverbrauchs auf diese Dauerlast entf\u00e4llt.</span></span>
+                </div>
+                <div class="value">${fmtNum(r.globalMinKW * 1000, 0)} W</div>
+                <div class="detail">Spitzenlast: ${fmtNum(r.globalMaxKW, 2)} kW</div>
+                <div class="sub">Grundlast-Anteil am Gesamtverbrauch: ${fmtNum(r.baseloadPct, 1)} %</div>
+            </div>
+            ${r.unmatched > 0 ? `<div class="stat-card" style="grid-column: span 4">
+                <div class="detail" style="color:#b45309">\u26a0 ${r.unmatched} Intervalle ohne Spotpreis-Zuordnung (nicht in Berechnung enthalten)</div>
+            </div>` : ''}`;
+    }
+
+    function renderChart(r) {
+        const traceSpot = {
+            x: r.ts, y: r.cSpot,
+            type: 'scattergl', mode: 'lines',
+            name: 'Spotpreis (ct/kWh)',
+            line: { color: '#2563eb', width: 1 },
+            yaxis: 'y',
+            hovertemplate: '%{x|%d.%m.%Y %H:%M}<br>Spotpreis: %{y:.2f} ct/kWh<extra></extra>',
+        };
+        const tracePower = {
+            x: r.ts, y: r.cKW,
+            type: 'scattergl', mode: 'lines',
+            name: 'Leistung (kW)',
+            line: { color: '#f97316', width: 1 },
+            fill: 'tozeroy',
+            fillcolor: 'rgba(249,115,22,0.1)',
+            yaxis: 'y2',
+            hovertemplate: '%{x|%d.%m.%Y %H:%M}<br>Leistung: %{y:.3f} kW<extra></extra>',
+        };
+
+        const layout = {
+            margin: { t: 20, r: 65, b: 40, l: 65 },
+            xaxis: {
+                type: 'date',
+                rangeslider: { visible: true, thickness: 0.08 },
+                rangeselector: {
+                    buttons: [
+                        { count: 7, label: '1W', step: 'day', stepmode: 'backward' },
+                        { count: 1, label: '1M', step: 'month', stepmode: 'backward' },
+                        { count: 3, label: '3M', step: 'month', stepmode: 'backward' },
+                        { step: 'all', label: 'Alles' },
+                    ],
+                    x: 0, y: 1.12,
+                },
+            },
+            yaxis: {
+                title: 'Spotpreis (ct/kWh)',
+                titlefont: { color: '#2563eb', size: 12 },
+                tickfont: { color: '#2563eb' },
+                side: 'left',
+                gridcolor: '#f0f0f0',
+                zeroline: true, zerolinecolor: '#ddd',
+            },
+            yaxis2: {
+                title: 'Leistung (kW)',
+                titlefont: { color: '#f97316', size: 12 },
+                tickfont: { color: '#f97316' },
+                overlaying: 'y', side: 'right',
+                showgrid: false,
+                rangemode: 'tozero',
+            },
+            legend: { orientation: 'h', y: 1.15, x: 0.5, xanchor: 'center' },
+            hovermode: 'x unified',
+            plot_bgcolor: '#fafafa',
+            paper_bgcolor: 'white',
+        };
+
+        Plotly.newPlot('chart', [traceSpot, tracePower], layout, {
+            responsive: true,
+            displayModeBar: true,
+            modeBarButtonsToRemove: ['lasso2d', 'select2d', 'toImage'],
+            displaylogo: false,
+        });
+    }
+
+    const MONTHS = ['J\u00e4nner','Februar','M\u00e4rz','April','Mai','Juni',
+        'Juli','August','September','Oktober','November','Dezember'];
+
+    function renderTable(r) {
+        const rows = [...r.monthly.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+        let html = `<thead><tr>
+            <th>Monat</th><th>Verbrauch</th><th>Grundlast</th><th>Spitzenlast</th>
+            <th>\u00d8 Spotpreis</th><th>Spotkosten</th><th>Gesamtkosten</th>
+        </tr></thead><tbody>`;
+
+        let globalMinKW = Infinity, globalMaxKW = 0;
+        for (const [key, m] of rows) {
+            const [y, mo] = key.split('-');
+            const avgSpot = m.n > 0 ? m.spotSum / m.n : 0;
+            if (m.minKW < globalMinKW) globalMinKW = m.minKW;
+            if (m.maxKW > globalMaxKW) globalMaxKW = m.maxKW;
+            html += `<tr>
+                <td>${MONTHS[parseInt(mo) - 1]} ${y}</td>
+                <td>${fmtNum(m.kWh, 1)} kWh</td>
+                <td>${fmtNum(m.minKW * 1000, 0)} W</td>
+                <td>${fmtNum(m.maxKW, 2)} kW</td>
+                <td>${fmtNum(avgSpot, 2)} ct/kWh</td>
+                <td>${fmtNum(m.spotCt / 100, 2)} \u20ac</td>
+                <td>${fmtNum(m.fullCt / 100, 2)} \u20ac</td>
+            </tr>`;
+        }
+        html += `<tr>
+            <td>Gesamt</td>
+            <td>${fmtNum(r.totalkWh, 1)} kWh</td>
+            <td>${fmtNum(globalMinKW * 1000, 0)} W</td>
+            <td>${fmtNum(globalMaxKW, 2)} kW</td>
+            <td>${fmtNum(r.avgSpot, 2)} ct/kWh</td>
+            <td>${fmtNum(r.spotCostEur, 2)} \u20ac</td>
+            <td>${fmtNum(r.fullCostEur, 2)} \u20ac</td>
+        </tr></tbody>`;
+        $('monthlyTable').innerHTML = html;
+    }
+
+    // --- Helpers ---
+    function fmtNum(n, d) { return n.toLocaleString('de-AT', { minimumFractionDigits: d, maximumFractionDigits: d }); }
+    function fmtDate(d) { return d.toLocaleDateString('de-AT', { day: '2-digit', month: '2-digit', year: 'numeric' }); }
+
+    function showError(msg) {
+        errorMsg.textContent = msg;
+        errorMsg.classList.remove('hidden');
+    }
+
+    function runCalc() {
+        const r = calculate();
+        renderStats(r);
+        renderChart(r);
+        renderTable(r);
+        results.classList.remove('hidden');
+    }
+
+    calcBtn.addEventListener('click', () => {
+        if (!consumptionData) return;
+        errorMsg.classList.add('hidden');
+        results.classList.add('hidden');
+        try { runCalc(); } catch (err) { showError(err.message); }
+    });
+
+    Object.values(inputs).forEach(input => {
+        input.addEventListener('change', () => {
+            if (consumptionData && !results.classList.contains('hidden')) runCalc();
+        });
+    });
+})();
+</script>
+</body>
+</html>
