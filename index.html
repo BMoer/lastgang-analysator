@@ -536,9 +536,10 @@
     function runCalc() {
         const r = calculate();
         renderStats(r);
-        renderChart(r);
         renderTable(r);
         results.classList.remove('hidden');
+        // Chart muss NACH display:block gerendert werden, sonst berechnet Plotly die Breite falsch
+        renderChart(r);
     }
 
     calcBtn.addEventListener('click', () => {
